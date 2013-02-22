@@ -41,7 +41,6 @@
 		this.formatType = options.formatType || this.element.data('format-type') || 'standard';
 		this.format = DPGlobal.parseFormat(options.format || this.element.data('date-format') || DPGlobal.getDefaultFormat(this.formatType, 'input'), this.formatType);
 		this.isInline = false;
-		this.isVisible = false;
 		this.isInput = this.element.is('input');
 		this.component = this.element.is('.date') ? this.element.find('.add-on .icon-th, .add-on .icon-time, .add-on .icon-calendar').parent() : false;
 		this.componentReset = this.element.is('.date') ? this.element.find('.add-on .icon-remove').parent() : false;
@@ -223,7 +222,6 @@
 				e.stopPropagation();
 				e.preventDefault();
 			}
-			this.isVisible = true;
 			this.element.trigger({
 				type: 'show',
 				date: this.date
@@ -231,7 +229,6 @@
 		},
 
 		hide: function(e){
-			if(!this.isVisible) return;
 			if(this.isInline) return;
 			this.picker.hide();
 			$(window).off('resize', this.place);
@@ -249,7 +246,6 @@
 				)
 			)
 				this.setValue();
-			this.isVisible = false;
 			this.element.trigger({
 				type: 'hide',
 				date: this.date
@@ -370,7 +366,7 @@
 				date = arguments[0];
 				fromArgs = true;
 			} else {
-				date = this.isInput ? this.element.prop('value') : this.element.data('date') || this.element.find('input').prop('value') || new Date();
+				date = this.isInput ? this.element.prop('value') : this.element.find('input').prop('value') || this.element.data('date') || new Date();
 			}
 
 			if (!date) {
@@ -409,6 +405,41 @@
 				html += '<span class="month">'+dates[this.language].monthsShort[i++]+'</span>';
 			}
 			this.picker.find('.datetimepicker-months td').html(html);
+		},
+		to12or24Format: function (i) {
+			if (this.format.parts.indexOf('I') >= 0 || this.format.parts.indexOf('II') >= 0) {
+				return i % 12 == 0 ? 12 : i % 12;
+			}
+			else {
+				return i;
+			}
+		},
+		toAmPm: function (i) {
+			if (this.format.parts.indexOf('pp') >= 0) {
+				return dates[this.language].meridiem.length == 2 ? dates[this.language].meridiem[i < 12 ? 0 : 1] : '';
+			}
+			else if (this.format.parts.indexOf('p') >= 0) {
+				return dates[this.language].meridiemShort.length == 2 ? dates[this.language].meridiemShort[i < 12 ? 0 : 1] : '';
+			}
+			else {
+				return '';
+			}
+		},
+		is12HourFormat: function () {
+			return (this.format.parts.indexOf('I') >= 0 || this.format.parts.indexOf('II') >= 0);
+		},
+		parseHours: function(timeText) {
+			var hours = parseInt(timeText, 10) || 0;
+			if (this.is12HourFormat()) {
+				if (hours == 12)
+					hours = 0;
+				var pm = dates[this.language].meridiemShort[1];
+				var iPm = timeText.indexOf(pm);
+				if(iPm >= 0) {
+					hours += 12;
+				}
+			}
+			return hours;
 		},
 
 		fill: function() {
@@ -469,7 +500,7 @@
 				if (prevMonth.valueOf() == currentDate) {
 					clsName += ' active';
 				}
-				if ((prevMonth.valueOf() + 86400000) <= this.startDate || prevMonth.valueOf() > this.endDate ||
+				if ((prevMonth.valueOf() + 86400000) < this.startDate || prevMonth.valueOf() > this.endDate ||
 					$.inArray(prevMonth.getUTCDay(), this.daysOfWeekDisabled) !== -1) {
 					clsName += ' disabled';
 				}
@@ -486,12 +517,12 @@
 				var actual = UTCDate(year, month, dayMonth, i);
 				clsName = '';
 				// We want the previous hour for the startDate
-				if ((actual.valueOf() + 3600000) <= this.startDate || actual.valueOf() > this.endDate) {
+				if ((actual.valueOf() + 3600000) < this.startDate || actual.valueOf() > this.endDate) {
 					clsName += ' disabled';
 				} else if (hours == i) {
 					clsName += ' active';
 				}
-				html.push('<span class="hour'+clsName+'">'+i+':00</span>');
+				html.push('<span class="hour'+clsName+'">'+ this.to12or24Format(i) + (this.is12HourFormat() ? '' : ':00') + this.toAmPm(i) + '</span>');
 			}
 			this.picker.find('.datetimepicker-hours td').html(html.join(''));
 
@@ -504,7 +535,7 @@
 				} else if (Math.floor(minutes/this.minuteStep) == Math.floor(i/this.minuteStep)) {
 					clsName += ' active';
 				}
-				html.push('<span class="minute'+clsName+'">'+hours+':'+(i<10?'0'+i:i)+'</span>');
+				html.push('<span class="minute' + clsName + '">' + this.to12or24Format(hours) + ':' + (i < 10 ? '0' + i : i) + '</span>');
 			}
 			this.picker.find('.datetimepicker-minutes td').html(html.join(''));
 
@@ -682,7 +713,8 @@
 									date: this.viewDate
 								});
 							} else if (target.is('.hour')){
-								var hours = parseInt(target.text(), 10) || 0;
+								//var hours = parseInt(target.text(), 10) || 0;
+								var hours = this.parseHours(target.text()) || 0;
 								var year = this.viewDate.getUTCFullYear(),
 									month = this.viewDate.getUTCMonth(),
 									day = this.viewDate.getUTCDate(),
@@ -770,6 +802,15 @@
 				element.change();
 				if (this.autoclose && (!which || which == 'date')) {
 					//this.hide();
+				}
+			}
+		},
+		
+		beforeSubmit: function() {
+			if (this.component){
+				element = this.element.find('input');
+				if(element) {
+					element.prop('value', this.getFormattedDate(DPGlobal.parseFormat('yyyy-mm-dd hh:ii:ss', 'standard')));
 				}
 			}
 		},
@@ -980,6 +1021,7 @@
 			months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
 			monthsShort: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
 			meridiem: ["am", "pm"],
+			meridiemShort: ["a", "p"],
 			suffix: ["st", "nd", "rd", "th"],
 			today: "Today"
 		}
@@ -1035,7 +1077,7 @@
 		},
 		validParts: function (type) {
 			if (type == "standard") {
-				return /hh?|ii?|ss?|dd?|mm?|MM?|yy(?:yy)?/g;
+				return /II?|pp?|hh?|ii?|ss?|dd?|mm?|MM?|a|A|yy(?:yy)?/g;
 			} else if (type == "php") {
 				return /[dDjlNwzFmMnStyYaABgGhHis]/g;
 			} else {
@@ -1067,6 +1109,12 @@
 			if (/^\d{4}\-\d{1,2}\-\d{1,2}[T ]\d{1,2}\:\d{1,2}\:\d{1,2}[Z]{0,1}$/.test(date)) {
 				format = this.parseFormat('yyyy-mm-dd hh:ii:ss', type);
 			}
+			if (/^\d{4}\-\d{1,2}\-\d{1,2}[T ]\d{1,2}\:\d{1,2}[ ]\w{1,2}$/.test(date)) {
+				format = this.parseFormat('yyyy-mm-dd II:ii pp', type);
+			}
+			if (/^\d{4}\-\d{1,2}\-\d{1,2}[T ]\d{1,2}\:\d{1,2}\:\d{1,2}[Z]{0,1}[ ]\w{1,2}$/.test(date)) {
+				format = this.parseFormat('yyyy-mm-dd II:ii:ss pp', type);
+			}
 			if (/^[-+]\d+[dmwy]([\s,]+[-+]\d+[dmwy])*$/.test(date)) {
 				var part_re = /([-+]\d+)([dmwy])/,
 					parts = date.match(/([-+]\d+)([dmwy])/g),
@@ -1095,7 +1143,7 @@
 			var parts = date && date.match(this.nonpunctuation) || [],
 				date = new Date(0, 0, 0, 0, 0, 0),
 				parsed = {},
-				setters_order = ['hh', 'h', 'ii', 'i', 'ss', 's', 'yyyy', 'yy', 'M', 'MM', 'm', 'mm', 'd', 'dd'],
+				setters_order = ['hh', 'h', 'ii', 'i', 'ss', 's', 'yyyy', 'yy', 'M', 'MM', 'm', 'mm', 'd', 'dd', 'II', 'I', 'pp', 'p', 'A', 'a'],
 				setters_map = {
 					hh: function(d,v){ return d.setUTCHours(v); },
 					h:  function(d,v){ return d.setUTCHours(v); },
@@ -1114,7 +1162,43 @@
 							d.setUTCDate(d.getUTCDate()-1);
 						return d;
 					},
-					d: function(d,v){ return d.setUTCDate(v); }
+					d: function(d,v){ return d.setUTCDate(v); },
+					II: function (d, v) { return d.setUTCHours(v); },
+					I: function (d, v) { return d.setUTCHours(v); },
+					pp: function (d, v) {
+						if (v == 2) {
+							var c = d.getUTCHours();
+							if (c < 12)
+								c += 12;
+							c %= 24;
+							return d.setUTCHours(c);
+						}
+						else {
+							var c = d.getUTCHours();
+							if (c == 12)
+								c = 0;
+							c %= 24;
+							return d.setUTCHours(c);
+						}
+					},
+					p: function (d, v) {
+						if (v == 2) {
+							var c = d.getUTCHours();
+							if (c < 12)
+								c += 12;
+							c %= 24;
+							return d.setUTCHours(c);
+						}
+						else {
+							var c = d.getUTCHours();
+							if (c == 12)
+								c = 0;
+							c %= 24;
+							return d.setUTCHours(c);
+						}
+					},
+					A: function (d, v) { },
+					a: function (d, v) { },
 				},
 				val, filtered, part;
 			setters_map['M'] = setters_map['MM'] = setters_map['mm'] = setters_map['m'];
@@ -1142,6 +1226,38 @@
 								});
 								val = $.inArray(filtered[0], dates[language].monthsShort) + 1;
 								break;
+									    case 'pp':
+						        filtered = $(dates[language].meridiem).filter(function () {
+						            var m = this.slice(0, parts[i].length),
+										p = parts[i].slice(0, m.length);
+						            return m == p.toLowerCase();
+						        });
+						        val = $.inArray(filtered[0], dates[language].meridiem) + 1;
+						        break;
+						    case 'p':
+						        filtered = $(dates[language].meridiemShort).filter(function () {
+						            var m = this.slice(0, parts[i].length),
+										p = parts[i].slice(0, m.length);
+						            return m == p.toLowerCase();
+						        });
+						        val = $.inArray(filtered[0], dates[language].meridiemShort) + 1;
+						        break;
+						    case 'A':
+						        filtered = $(dates[language].days).filter(function () {
+						            var m = this.slice(0, parts[i].length),
+										p = parts[i].slice(0, m.length);
+						            return m.toLowerCase() == p.toLowerCase();
+						        });
+						        val = $.inArray(filtered[0], dates[language].days) + 1;
+						        break;
+						    case 'a':
+						        filtered = $(dates[language].daysShort).filter(function () {
+						            var m = this.slice(0, parts[i].length),
+										p = parts[i].slice(0, m.length);
+						            return m.toLowerCase() == p.toLowerCase();
+						        });
+						        val = $.inArray(filtered[0], dates[language].daysShort) + 1;
+						        break;
 						}
 					}
 					parsed[part] = val;
@@ -1176,8 +1292,19 @@
 					i: date.getUTCMinutes(),
 					// second
 					s: date.getUTCSeconds(),
+					// The first character of the AM/PM designator.
+					p: (dates[language].meridiemShort.length == 2 ? dates[language].meridiemShort[date.getUTCHours() < 12 ? 0 : 1] : ''),
+					// AM or PM designation
+					pp: (dates[language].meridiem.length == 2 ? dates[language].meridiem[date.getUTCHours() < 12 ? 0 : 1] : ''),
+					// The hour, using a 12-hour clock from 1 to 12.
+					I: (date.getUTCHours() % 12 == 0 ? 12 : date.getUTCHours() % 12),
+					// The full name of the day of the week.
+					A: dates[language].days[date.getUTCDay()],
+					// The abbreviated name of the day of the week.
+					a: dates[language].daysShort[date.getUTCDay()],
 				};
 				val.hh = (val.h < 10 ? '0' : '') + val.h;
+				val.II = (val.I < 10 ? '0' : '') + val.I;
 				val.ii = (val.i < 10 ? '0' : '') + val.i;
 				val.ss = (val.s < 10 ? '0' : '') + val.s;
 				val.dd = (val.d < 10 ? '0' : '') + val.d;
